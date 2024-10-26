@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This is a template for launching a VPC, SG, Subnet and an EC2 including some user data.
+
+
+Parameters:
+
+  ProjectEnvironment:
+    Description: Select the appropriate environment!
+    Type: String
+    AllowedValues:
+      - Dev
+      - QA
+      - Prod
+
+  ProjectKeyPair:
+    Description: Select your Key Pair!
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: project-key
+
+  ProjectAMI:
+    Description: Please enter the Image ID of your Ubuntu or Amazon Linux 2023 AMI!
+    Type: String
+    Default: ami-04dd23e62ed049936 # Ubuntu
+    #Default: ami-07c5ecd8498c59db5 # Amazon Linux 2023
+
+  ProjectAVZone:
+    Description: Select the appropriate Availability Zone!
+    Type: String
+    Default: us-west-2a
+
+
+Mappings:
+
+  EnvironmentMap:
+    Dev:
+      InstanceType: t3.small
+      Name: Dev Team
+    QA:
+      InstanceType: t3.nano
+      Name: QA Team
+    Prod:
+      InstanceType: t3.medium
+      Name: Prod Team
+
+
+Resources:
+
+  ProjectVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Project VPC
+
+  ProjectSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref ProjectAVZone
+      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.0.0/24
+      VpcId: !Ref ProjectVPC
+      Tags:
+        - Key: Name
+          Value: !FindInMap
+            - EnvironmentMap
+            - !Ref ProjectEnvironment
+            - Name
+
+  ProjectInternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  ProjectAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref ProjectVPC
+      InternetGatewayId: !Ref ProjectInternetGateway
+
+  ProjectRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref ProjectVPC
+
+  ProjectRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ProjectRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref ProjectInternetGateway
+
+  ProjectRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref ProjectRouteTable
+      SubnetId: !Ref ProjectSubnet
+
+  ProjectSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allowing HTTP and SSH traffic
+      VpcId: !Ref ProjectVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !FindInMap
+            - EnvironmentMap
+            - !Ref ProjectEnvironment
+            - Name
+
+  ProjectEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !FindInMap
+        - EnvironmentMap
+        - !Ref ProjectEnvironment
+        - InstanceType
+      ImageId: !Ref ProjectAMI
+      KeyName: !Ref ProjectKeyPair
+      SecurityGroupIds:
+        - !Ref ProjectSG
+      SubnetId: !Ref ProjectSubnet
+      Tags:
+        - Key: Name
+          Value: !FindInMap
+            - EnvironmentMap
+            - !Ref ProjectEnvironment
+            - Name
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash -v
+          echo "Hello World!"
+
+          if [[ -f /etc/lsb-release ]]; then  # Check if it's Ubuntu
+            apt-get update -y
+            apt-get install -y apache2
+            systemctl start apache2
+            systemctl enable apache2
+          elif [[ -f /etc/system-release ]]; then  # Check if it's Amazon Linux 2023
+            dnf update -y
+            dnf install -y httpd
+            systemctl start httpd
+            systemctl enable httpd
+          fi
+
+
+Outputs:
+
+  EnvironmentName:
+    Value: !FindInMap
+      - EnvironmentMap
+      - !Ref ProjectEnvironment
+      - Name
+
+  Region:
+    Value: !Ref AWS::Region
