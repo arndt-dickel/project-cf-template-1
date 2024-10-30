@@ -4,7 +4,7 @@ This template deploys a basic AWS infrastructure consisting of:
 
 * A Virtual Private Cloud (VPC) with a CIDR block of 10.0.0.0/16
 * An Internet Gateway attached to the VPC
-* A public subnet with a CIDR block of 10.0.0.0/24
+* A public subnet with a CIDR block of 10.0.1.0/24
 * A route table associated with the subnet, routing all traffic (0.0.0.0/0) to the internet gateway
 * A security group allowing HTTP (port 80) and SSH (port 22) access
 * An EC2 instance launched into the public subnet
